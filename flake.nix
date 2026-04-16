@@ -5,7 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
   };
 
-  outputs = { nixpkgs, ... }:
+  outputs = { self, nixpkgs, ... }:
     let
       systems = [
         "x86_64-linux"
@@ -13,49 +13,30 @@
       ];
 
       forAllSystems = nixpkgs.lib.genAttrs systems;
+      pkgsFor = system: import nixpkgs { inherit system; };
     in
     {
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor system;
+          playwriter = pkgs.callPackage ./nix/playwriter { };
+        in
+        {
+          inherit playwriter;
+          default = playwriter;
+        }
+      );
+
       devShells = forAllSystems (
         system:
         let
-          pkgs = import nixpkgs {
-            inherit system;
-          };
-
-          # Prefer Chromium here: Nix-managed extension workflows are better aligned
-          # with Chromium than with proprietary Google Chrome.
-          jsonhubChrome = pkgs.writeShellApplication {
-            name = "jsonhub-chrome";
-            runtimeInputs = [
-              pkgs.coreutils
-              pkgs.chromium
-            ];
-            text = ''
-              profile_dir="$PWD/.jsonhub/chromium-profile"
-              mkdir -p "$profile_dir"
-
-              exec "${pkgs.chromium}/bin/chromium" \
-                --user-data-dir="$profile_dir" \
-                --no-first-run \
-                --no-default-browser-check \
-                "$@"
-            '';
-          };
+          pkgs = pkgsFor system;
+          playwriter = self.packages.${system}.playwriter;
         in
         {
-          default = pkgs.mkShell {
-            packages = [
-              pkgs.chromium
-              pkgs.nodejs
-              jsonhubChrome
-            ];
-
-            shellHook = ''
-              export JSONHUB_CHROME_BIN="${pkgs.chromium}/bin/chromium"
-              export CHROME_BIN="$JSONHUB_CHROME_BIN"
-              export JSONHUB_CHROME_USER_DATA_DIR="$PWD/.jsonhub/chromium-profile"
-              mkdir -p "$JSONHUB_CHROME_USER_DATA_DIR"
-            '';
+          default = import ./nix/dev-shell.nix {
+            inherit pkgs playwriter;
           };
         }
       );
