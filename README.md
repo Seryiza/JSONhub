@@ -1,5 +1,5 @@
 <p align="right">
-  <img width="100" height="100" alt="jsonhub2" src="https://github.com/user-attachments/assets/830d04bd-f21d-49b5-b427-e903b623b50c" />
+  <img width="100" height="100" alt="ascii bird" src="https://github.com/user-attachments/assets/830d04bd-f21d-49b5-b427-e903b623b50c" />
 
 </p>
 
