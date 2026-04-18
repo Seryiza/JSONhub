@@ -31,12 +31,13 @@ session_name="jsonhub-run-$$"
 temp_dir="$PWD/.jsonhub/tmp"
 mkdir -p "$temp_dir"
 code_path="$(mktemp "$temp_dir/run-via-playwright.XXXXXX.js")"
+prepared_script_path="$(mktemp "$temp_dir/run-via-playwright.source.XXXXXX.js")"
 output_path="$(mktemp)"
 error_path="$(mktemp)"
 opened_session=0
 
 cleanup() {
-  rm -f "$code_path" "$output_path" "$error_path"
+  rm -f "$code_path" "$prepared_script_path" "$output_path" "$error_path"
   if [ "$opened_session" -eq 1 ]; then
     bunx playwright-cli -s="$session_name" close >/dev/null 2>&1 || true
   fi
@@ -101,44 +102,50 @@ EOF
 
 open_browser
 
-cat >"$code_path" <<'EOF'
-async (page) => {
-  return await page.evaluate(async () => {
-    const logs = [];
-    const originalLog = console.log.bind(console);
-    const toText = (value) => {
-      if (typeof value === 'string') return value;
-      try {
-        return JSON.stringify(value);
-      } catch {
-        return String(value);
-      }
-    };
-    console.log = (...args) => {
-      logs.push(args.map(toText).join(' '));
-      originalLog(...args);
-    };
-    try {
-EOF
-cat "$script_path" >>"$code_path"
-cat >>"$code_path" <<'EOF'
-      return logs;
-    } finally {
-      console.log = originalLog;
+# Browser scripts are pasted into DevTools as top-level code, so they end with
+# an expression instead of `return ...`. Rewrite the last non-empty line to an
+# explicit return before running it via AsyncFunction in Playwright.
+awk '
+  {
+    lines[NR] = $0
+    if ($0 ~ /[^[:space:]]/) last = NR
+  }
+  END {
+    if (!last) {
+      print "Script is empty" > "/dev/stderr"
+      exit 1
     }
-  });
+    expr = lines[last]
+    match(expr, /^[[:space:]]*/)
+    indent = substr(expr, 1, RLENGTH)
+    sub(/^[[:space:]]+/, "", expr)
+    sub(/[[:space:]]*;?[[:space:]]*$/, "", expr)
+    lines[last] = indent "return (" expr ");"
+    for (i = 1; i <= NR; i++) print lines[i]
+  }
+' "$script_path" > "$prepared_script_path"
+
+script_json="$(jq -Rs . < "$prepared_script_path")"
+
+cat >"$code_path" <<EOF
+async (page) => {
+  const source = $script_json;
+  return await page.evaluate(async (source) => {
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    return await new AsyncFunction(source)();
+  }, source);
 }
 EOF
 
 bunx playwright-cli -s="$session_name" --raw run-code --filename="$code_path" >"$output_path"
 if [ ! -s "$output_path" ]; then
-  echo "Playwright script returned no data. End the script with console.log(JSON.stringify(...))." >&2
+  echo "Playwright script returned no data. End the script with a final expression like JSON.stringify(...)." >&2
   exit 1
 fi
-if ! jq -e 'type == "array" and length > 0' "$output_path" >/dev/null 2>&1; then
+if ! jq -e 'type == "string"' "$output_path" >/dev/null 2>&1; then
   cat "$output_path" >&2
   exit 1
 fi
-json_output="$(jq -r 'last' "$output_path")"
+json_output="$(jq -r '.' "$output_path")"
 printf '%s\n' "$json_output" | jq -e . >/dev/null
 printf '%s\n' "$json_output" | jq .

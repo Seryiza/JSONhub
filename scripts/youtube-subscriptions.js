@@ -218,4 +218,4 @@ async function scrollUntilPageStopsGrowing() {
   }
 }
 
-console.log(JSON.stringify(await getYoutubeSubscriptions()));
+JSON.stringify(await getYoutubeSubscriptions())
