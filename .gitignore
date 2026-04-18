@@ -1,2 +1,4 @@
 /.codex
 /.jsonhub
+/.playwright-cli/
+/node_modules

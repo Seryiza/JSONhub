@@ -1,0 +1,13 @@
+{
+  "name": "jsonhub",
+  "private": true,
+  "version": "0.1.0",
+  "description": "JSON Hub browser automation helpers",
+  "type": "module",
+  "scripts": {
+    "playwright-cli": "playwright-cli"
+  },
+  "devDependencies": {
+    "@playwright/cli": "^0.1.8"
+  }
+}

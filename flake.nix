@@ -1,5 +1,5 @@
 {
-  description = "jsonhub development shell with Chromium for browser-based script testing";
+  description = "jsonhub development shell with Google Chrome for browser-based script testing";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
@@ -13,31 +13,18 @@
       ];
 
       forAllSystems = nixpkgs.lib.genAttrs systems;
-      pkgsFor = system: import nixpkgs { inherit system; };
     in
     {
-      packages = forAllSystems (
-        system:
-        let
-          pkgs = pkgsFor system;
-          playwriter = pkgs.callPackage ./nix/playwriter { };
-        in
-        {
-          inherit playwriter;
-          default = playwriter;
-        }
-      );
-
       devShells = forAllSystems (
         system:
         let
-          pkgs = pkgsFor system;
-          playwriter = self.packages.${system}.playwriter;
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
         in
         {
-          default = import ./nix/dev-shell.nix {
-            inherit pkgs playwriter;
-          };
+          default = import ./shell.nix { inherit pkgs; };
         }
       );
     };
